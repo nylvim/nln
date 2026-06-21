@@ -1,0 +1,7 @@
+AllowShortBlocksOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+ColumnLimit: 100
+IndentWidth: 4
+Language: C
+PointerAlignment: Left
