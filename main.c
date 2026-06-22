@@ -29,6 +29,7 @@ constexpr time_t TRANSFER_TIMEOUT = 5;
 constexpr size_t MAX_ACTIVE_THREADS = 64;
 /* CONFIG END */
 
+static_assert(MIN_LINK_LEN > 0);
 static_assert(MAX_LINK_LEN < 32);
 static_assert(DEFAULT_LINK_LEN >= MIN_LINK_LEN);
 static_assert(DEFAULT_LINK_LEN <= MAX_LINK_LEN);
@@ -64,11 +65,6 @@ Db db_clone(const Db* db) {
     return (Db){pairs, db->len, db->len, db->is_modified};
 }
 
-void db_free(Db* db) {
-    free(db->pairs);
-    *db = (Db){};
-}
-
 void db_insert_at(Db* db, size_t pos, Pair pair) {
     if (db->size <= db->len) {
         db->size = db->size * 2;
@@ -99,12 +95,6 @@ size_t db_bsearch(const Db* db, const char* target, bool* is_present) {
     return low;
 }
 
-const char* db_get(const Db* db, const char* key) {
-    bool is_present;
-    auto pos = db_bsearch(db, key, &is_present);
-    return is_present ? db->pairs[pos].value : nullptr;
-}
-
 char* db_remove_key(Db* db, const char* key) {
     bool is_present;
     auto pos = db_bsearch(db, key, &is_present);
@@ -117,30 +107,24 @@ char* db_remove_key(Db* db, const char* key) {
 }
 
 size_t db_remove_all_values(Db* db, const char* value) {
-    size_t og_len = db->len;
+    size_t read = 0;
     size_t write = 0;
-    for (size_t read = 0; read < db->len; read++) {
+    for (; read < db->len; read++) {
         if (strcmp(value, db->pairs[read].value) != 0) {
             if (read != write) { db->pairs[write] = db->pairs[read]; }
             write++;
         }
     }
     db->len = write;
-    db->is_modified |= og_len - write != 0;
-    return og_len - write;
+    db->is_modified |= read - write != 0;
+    return read - write;
 }
 
 bool db_save(const Db* db, const char* filename) {
-    auto filename_len = strlen(filename);
-    char* tmp_filename = malloc(filename_len + 5);
-    strcpy(tmp_filename, filename);
-    strcat(tmp_filename, ".tmp");
-
+    char tmp_filename[strlen(filename) + 5];
+    sprintf(tmp_filename, "%s.tmp", filename);
     auto file = fopen(tmp_filename, "w");
-    if (!file) {
-        free(tmp_filename);
-        return false;
-    }
+    if (!file) { return false; }
 
     for (size_t i = 0; i < db->len; i++) {
         auto pair = db->pairs[i];
@@ -149,7 +133,6 @@ bool db_save(const Db* db, const char* filename) {
 
     fclose(file);
     auto res = rename(tmp_filename, filename);
-    free(tmp_filename);
     return res == 0;
 }
 
@@ -196,7 +179,7 @@ bool auth(const char* header) {
         if (strncmp(header, "Authorization: Bearer ", 22) == 0) {
             header += 22;
             line_break = strstr(header, "\r\n");
-            return line_break ? strncmp(header, AUTH_TOKEN, line_break - header) == 0 : false;
+            return line_break && strncmp(header, AUTH_TOKEN, line_break - header) == 0;
         }
     }
     return false;
@@ -283,7 +266,7 @@ char* create_link(size_t len, const char* url) {
 #define METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
 #define NOT_ACCEPTABLE "HTTP/1.1 406 Not Acceptable\r\n"
 #define CONFLICT "HTTP/1.1 409 Conflict\r\n"
-#define CONTENT_TOO_LARGE "413 Content Too Large"
+#define CONTENT_TOO_LARGE "413 Content Too Large\r\n"
 #define UNPROCESSABLE_CONTENT "HTTP/1.1 422 Unprocessable Content\r\n"
 #define INTERNAL_SERVER_ERROR "HTTP/1.1 500 Internal Server Error\r\n"
 
@@ -373,11 +356,13 @@ void* handle_request(void* arg) {
         auto path_len = strlen(path);
         if (path_len < MIN_LINK_LEN || path_len > MAX_LINK_LEN) { RESPOND_WITH_ERR(NOT_FOUND); }
 
-        auto read = delim ? query_arg(delim + 1, "read") : false;
+        bool read = delim && query_arg(delim + 1, "read");
 
         pthread_rwlock_rdlock(&DB_LOCK);
-        auto target = db_get(&GLOBAL_DB, path);
-        if (target) {
+        bool is_present;
+        auto pos = db_bsearch(&GLOBAL_DB, path, &is_present);
+        if (is_present) {
+            auto target = GLOBAL_DB.pairs[pos].value;
             if (read) {
                 RESPOND_WITH_BODY(OK, target);
             } else {
@@ -400,7 +385,7 @@ void* handle_request(void* arg) {
         auto body = request + header_size;
         if (!validate_url(body)) { RESPOND_WITH_ERR(UNPROCESSABLE_CONTENT); }
 
-        auto delete = delim ? query_arg(delim + 1, "delete") : false;
+        bool delete = delim && query_arg(delim + 1, "delete");
 
         if (delete) {
             pthread_rwlock_wrlock(&DB_LOCK);
@@ -438,7 +423,7 @@ void* handle_request(void* arg) {
         auto body = request + header_size;
         if (!validate_url(body)) { RESPOND_WITH_ERR(UNPROCESSABLE_CONTENT); }
 
-        auto force = delim ? query_arg(delim + 1, "force") : false;
+        bool force = delim && query_arg(delim + 1, "force");
 
         pthread_rwlock_wrlock(&DB_LOCK);
         bool is_present;
@@ -500,7 +485,7 @@ void* db_saver(void*) {
         GLOBAL_DB.is_modified = false;
         pthread_rwlock_unlock(&DB_LOCK);
         db_save(&current_db, DB_FILENAME);
-        db_free(&current_db);
+        free(current_db.pairs);
     }
     return nullptr;
 }
