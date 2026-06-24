@@ -67,7 +67,7 @@ Db db_clone(const Db* db) {
 
 void db_insert_at(Db* db, size_t pos, Pair pair) {
     if (db->size <= db->len) {
-        db->size = db->size * 2;
+        db->size *= 2;
         db->pairs = realloc(db->pairs, db->size * sizeof(Pair));
     }
     memmove(db->pairs + pos + 1, db->pairs + pos, (db->len - pos) * sizeof(Pair));
@@ -566,7 +566,13 @@ int main(int argc, char** argv) {
 
         struct timeval tv = {.tv_sec = TRANSFER_TIMEOUT};
         auto res = setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        res |= setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        if (res != 0) {
+            close(client);
+            sem_post(&THREADS);
+            perror("setsockopt failed");
+            continue;
+        }
+        res = setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
         if (res != 0) {
             close(client);
             sem_post(&THREADS);
