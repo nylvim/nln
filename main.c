@@ -367,20 +367,25 @@ void* handle_request(void* arg) {
                 if (*method == 'H') {
                     char msg[8192];
                     snprintf(msg, 8192, OK "Content-Length: %zu\r\n\r\n", strlen(target));
+                    pthread_rwlock_unlock(&DB_LOCK);
                     send_all(client, msg, strlen(msg));
                 } else {
-                    RESPOND_WITH_BODY(OK, target);
+                    char tmp[4096];
+                    strncpy(tmp, target, 4095);
+                    pthread_rwlock_unlock(&DB_LOCK);
+                    RESPOND_WITH_BODY(OK, tmp);
                 }
             } else {
                 char msg[8192];
                 auto code = USE_301 ? MOVED_PERMANENTLY : FOUND;
                 snprintf(msg, 8192, "%sLocation: %s\r\nContent-Length: 0\r\n\r\n", code, target);
+                pthread_rwlock_unlock(&DB_LOCK);
                 send_all(client, msg, strlen(msg));
             }
         } else {
+            pthread_rwlock_unlock(&DB_LOCK);
             RESPOND_WITH(NOT_FOUND);
         }
-        pthread_rwlock_unlock(&DB_LOCK);
     } else if (strcmp(method, "POST") == 0) {
         if (body_len == 0) { RESPOND_WITH_ERR(BAD_REQUEST); }
         if (!auth(request)) { RESPOND_WITH_ERR(FORBIDDEN); }
@@ -407,11 +412,8 @@ void* handle_request(void* arg) {
             for (auto len = DEFAULT_LINK_LEN; len <= MAX_LINK_LEN; len++) {
                 if ((link = create_link(len, body))) { break; }
             }
-            if (!link) {
-                pthread_rwlock_unlock(&DB_LOCK);
-                RESPOND_WITH_ERR(INTERNAL_SERVER_ERROR);
-            }
             pthread_rwlock_unlock(&DB_LOCK);
+            if (!link) { RESPOND_WITH_ERR(INTERNAL_SERVER_ERROR); }
             RESPOND_WITH_BODY(OK, link);
             free(link);
         }
@@ -436,16 +438,19 @@ void* handle_request(void* arg) {
         auto pos = db_bsearch(&GLOBAL_DB, path, &is_present);
 
         if (is_present) {
+            auto target = GLOBAL_DB.pairs[pos].value;
+            char existing[4096];
+            strncpy(existing, target, 4095);
             if (force) {
-                auto target = GLOBAL_DB.pairs[pos].value;
                 strncpy(target, body, 4095);
                 target[body_len] = 0;
                 GLOBAL_DB.is_modified = true;
-                RESPOND_WITH_BODY(OK, target);
+                pthread_rwlock_unlock(&DB_LOCK);
+                RESPOND_WITH_BODY(OK, existing);
             } else {
-                RESPOND_WITH_BODY(CONFLICT, GLOBAL_DB.pairs[pos].value);
+                pthread_rwlock_unlock(&DB_LOCK);
+                RESPOND_WITH_BODY(CONFLICT, existing);
             }
-            pthread_rwlock_unlock(&DB_LOCK);
         } else {
             db_insert_at(&GLOBAL_DB, pos, pair_new(path, body));
             pthread_rwlock_unlock(&DB_LOCK);
