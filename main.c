@@ -350,7 +350,7 @@ void* handle_request(void* arg) {
         RESPOND_WITH_ERR(NOT_FOUND);
     }
 
-    if (strcmp(method, "GET") == 0) {
+    if (strcmp(method, "GET") == 0 || strcmp(method, "HEAD") == 0) {
         auto delim = strchr(path, '?');
         if (delim) { *delim = 0; }
         auto path_len = strlen(path);
@@ -364,7 +364,13 @@ void* handle_request(void* arg) {
         if (is_present) {
             auto target = GLOBAL_DB.pairs[pos].value;
             if (read) {
-                RESPOND_WITH_BODY(OK, target);
+                if (*method == 'H') {
+                    char msg[8192];
+                    snprintf(msg, 8192, OK "Content-Length: %zu\r\n\r\n", strlen(target));
+                    send_all(client, msg, strlen(msg));
+                } else {
+                    RESPOND_WITH_BODY(OK, target);
+                }
             } else {
                 char msg[8192];
                 auto code = USE_301 ? MOVED_PERMANENTLY : FOUND;

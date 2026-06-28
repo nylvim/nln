@@ -29,6 +29,8 @@ The `nlc` script contains a simple client using cURL.
 
 ---
 
+`HEAD` requests are also accepted at `GET` endpoints.
+
 `POST` / `PUT` / `DELETE` requests must include `Authorization: Bearer <token>` in the header.
 
 The request body should be a single line of plain text if present, so is the response body.
