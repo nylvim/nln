@@ -487,7 +487,10 @@ cleanup:
 void* db_saver(void*) {
     while (KEEP_RUNNING) {
         sleep(SAVE_DB_INTERVAL);
-        pthread_rwlock_wrlock(&DB_LOCK);
+        // no other threads read `is_modified`
+        // nor are any writing to the database
+        // so a read lock is safe
+        pthread_rwlock_rdlock(&DB_LOCK);
         if (!GLOBAL_DB.is_modified) {
             pthread_rwlock_unlock(&DB_LOCK);
             continue;
