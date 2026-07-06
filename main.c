@@ -121,7 +121,7 @@ size_t db_remove_all_values(Db* db, const char* value) {
 }
 
 bool db_save(const Db* db, const char* filename) {
-    char tmp_filename[strlen(filename) + 5];
+    char* tmp_filename = malloc(strlen(filename) + 5);
     sprintf(tmp_filename, "%s.tmp", filename);
     auto file = fopen(tmp_filename, "w");
     if (!file) { return false; }
@@ -133,6 +133,7 @@ bool db_save(const Db* db, const char* filename) {
 
     fclose(file);
     auto res = rename(tmp_filename, filename);
+    free(tmp_filename);
     return res == 0;
 }
 
