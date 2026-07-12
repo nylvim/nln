@@ -267,7 +267,7 @@ char* create_link(size_t len, const char* url) {
 #define METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed\r\n"
 #define NOT_ACCEPTABLE "HTTP/1.1 406 Not Acceptable\r\n"
 #define CONFLICT "HTTP/1.1 409 Conflict\r\n"
-#define CONTENT_TOO_LARGE "413 Content Too Large\r\n"
+#define CONTENT_TOO_LARGE "HTTP/1.1 413 Content Too Large\r\n"
 #define UNPROCESSABLE_CONTENT "HTTP/1.1 422 Unprocessable Content\r\n"
 #define INTERNAL_SERVER_ERROR "HTTP/1.1 500 Internal Server Error\r\n"
 
