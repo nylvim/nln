@@ -8,31 +8,51 @@ help() {
     echo "  force-set  <link> <url>"
     echo "  delete     <link>"
     echo "  delete-all <url>"
-    echo "  stop"
+    echo "  stop       (local server)"
+    echo "append curl arguments at the end"
+    exit
 }
 
-cmd() { if [ -n "$2" ]; then $1 $2; else help; fi; }
-cmd2() { if [ -n "$2" -a -n "$3" ]; then $1 $2 $3; else help; fi; }
+auth() { [ -n "$NLN_AUTH_TOKEN" ] || { echo auth token not set; exit 1; }; }
+cmd() { [ -n "$2" ] || help; "$@"; }
+cmd2() { [ -n "$2" -a -n "$3" ] || help; "$@"; }
 
-get() { curl "$NLN_ENDPOINT/$1?read=true"; }
-create() { curl -X POST "$NLN_ENDPOINT" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$1"; }
-set_() { curl -X PUT "$NLN_ENDPOINT/$1" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$2"; }
-force-set() { curl -X PUT "$NLN_ENDPOINT/$1?force=true" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$2"; }
-delete() { curl -X DELETE "$NLN_ENDPOINT/$1" -H "Authorization: Bearer $NLN_AUTH_TOKEN"; }
-delete-all() { curl -X POST "$NLN_ENDPOINT/?delete=true" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$1"; }
+get() {
+    l=$1; shift
+    curl "$@" "$NLN_ENDPOINT/$l?read=true"
+}
+create() {
+    l=$1; shift
+    curl "$@" -X POST "$NLN_ENDPOINT" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$l"
+}
+set_() {
+    l=$1; u=$2; shift 2
+    curl "$@" -X PUT "$NLN_ENDPOINT/$l" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$u"
+}
+force_set() {
+    l=$1; u=$2; shift 2
+    curl "$@" -X PUT "$NLN_ENDPOINT/$l?force=true" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$u"
+}
+delete() {
+    l=$1; shift
+    curl "$@" -X DELETE "$NLN_ENDPOINT/$l" -H "Authorization: Bearer $NLN_AUTH_TOKEN"
+}
+delete_all() {
+    u=$1; shift
+    curl "$@" -X POST "$NLN_ENDPOINT/?delete=true" -H "Authorization: Bearer $NLN_AUTH_TOKEN" -d "$u"
+}
 
-[ "$1" = "-h" -o "$1" = "--help" ] && { help; exit; }
-[ $(command -v curl) ] || { echo curl not found; exit 1; }
-[ -n "$NLN_AUTH_TOKEN" -o "$1" = "get" ] || { echo auth token not set; exit 1; }
+command -v curl > /dev/null || { echo curl not found; exit 1; }
 [ -n "$NLN_ENDPOINT" ] || NLN_ENDPOINT=http://127.0.0.1:6174
 
-case $1 in
-    get)        cmd  get        "$2"     ;;
-    create)     cmd  create     "$2"     ;;
-    set)        cmd2 set_       "$2" "$3";;
-    force-set)  cmd2 force-set  "$2" "$3";;
-    delete)     cmd  delete     "$2"     ;;
-    delete-all) cmd  delete-all "$2"     ;;
-    stop)       killall -i nln           ;;
+cmd=$1; shift
+case $cmd in
+    get)              cmd  get        "$@";;
+    create)     auth; cmd  create     "$@";;
+    set)        auth; cmd2 set_       "$@";;
+    force-set)  auth; cmd2 force_set  "$@";;
+    delete)     auth; cmd  delete     "$@";;
+    delete-all) auth; cmd  delete_all "$@";;
+    stop)             killall -i nln      ;;
     *) help;;
 esac
