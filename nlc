@@ -45,7 +45,7 @@ delete_all() {
 command -v curl > /dev/null || { echo curl not found; exit 1; }
 [ -n "$NLN_ENDPOINT" ] || NLN_ENDPOINT=http://127.0.0.1:6174
 
-cmd=$1; shift
+cmd=$1; [ -n "$1" ] && shift || help
 case $cmd in
     get)              cmd  get        "$@";;
     create)     auth; cmd  create     "$@";;
